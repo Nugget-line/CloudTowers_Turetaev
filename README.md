@@ -1,0 +1,28 @@
+git --version# Башни в облаках (CloudTowers) v0.4
+
+Графическая игра на C# (Windows Forms, .NET 8) по ТЗ, разделы 5.1–5.3.
+
+## Запуск
+Нужна Windows и .NET 8 SDK (https://dotnet.microsoft.com/download).
+
+    cd CloudTowers
+    dotnet run
+
+Или откройте CloudTowers.csproj в Visual Studio 2022 и нажмите F5.
+
+## Управление
+- Стрелки + Enter, цифры 0–4 или мышь.
+- Меню: 1 — Новая игра, 2 — Таблица рекордов, 0 — Выход.
+- Здание: 1 — Дальше, 2 — Магазин, 4 — Пирог, 0 — В меню.
+- Бой: 1 — Атака, 2 — Говорить, 3 — Пощада, 4 — Пирог.
+- Магазин: 1 — Купить пирог, 0 — Назад.
+- Сообщения в бою листаются Enter / Пробел / кликом.
+
+Рекорды сохраняются в records.txt рядом с exe-файлом.
+
+## Файлы
+- Program.cs — точка входа
+- Character.cs — Character, Hero, Enemy
+- Game.cs — логика игры
+- GameForm.cs — окно, рисование, ввод
+- RecordsManager.cs — таблица рекордов
