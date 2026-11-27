@@ -1,0 +1,7 @@
+v0.4 · 26.11.2026
+* Код разложен по 10 методам: ResetState, Attack, Talk, Spare, UsePie, BuyPie, EnemyTurn, EndBattle, Finish, ReadDigit
+* Main: 6 строк (без изменений)
++ ReadDigit(code, min, max) для чтения клавиш-цифр
++ Проект на GitHub: https://github.com/Nugget-line/CloudTowers_Turetaev
+Повторная проверка v0.2 и v0.3: _ из 6 OK
+План v0.5: экран «Правила»
