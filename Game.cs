@@ -3,51 +3,63 @@ using System.Collections.Generic;
 
 namespace CloudTowers
 {
-    public enum Scene { Menu, Records, Building, Battle, Shop, NameEntry }
+    public enum Scene { Menu, Records, Building, Fork, Battle, Shop, NameEntry }
 
     // Вся логика игры. Рисованием и вводом занимается GameForm.
     public class Game
     {
-        public const string Version = "v0.4";
+        public const string Version = "v0.5";
 
         // Стартовые значения состояния (константы)
         public const int StartHealth = 100;
         public const int StartGold = 20;
         public const int StartScore = 0;
         public const int StartPies = 0;
+        public const int StartCakes = 0;
 
         // F1: урон героя — случайное целое от HitMin до HitMax включительно
         public const int HitMin = 8;
         public const int HitMax = 12;
 
+        // Магазин
+        public const int PiePrice = 10;
+        public const int PieHeal = 30;
+        public const int CakePrice = 25;
+        public const int CakeHeal = 60;
+
+        private const int PeaceBonus = 50;
+        private const int EncountersPerBuilding = 2;
+        private const int MaxPaths = 3;
+
         // Один генератор случайных чисел на всю игру
         public static readonly Random Rnd = new Random();
-
-        private const int PiePrice = 10;
-        private const int PieHeal = 30;
-        private const int PeaceBonus = 50;
+        public static readonly string[] PathNames = { "Налево", "Прямо", "Направо" };
+        private static readonly string[] BuildingNames = { "Нижние облака", "Грозовая башня" };
 
         public Scene Scene = Scene.Menu;
         public Hero Hero = new Hero();
         public Enemy Enemy;
         public int Building;
-        public int Round = 1;
         public int EnemyIndex;
+        public int Round = 1;
         public bool KilledAnyone;
         public bool Won;
         public bool GotPeaceBonus;
         public string Info = "";
         public string ShopInfo = "";
+        public string ForkNote = "";
         public string PlayerName = "";
         public bool ExitRequested;
         public int HeroHurt;
         public int EnemyHurt;
         public List<RecordEntry> Records = new List<RecordEntry>();
 
+        // Список ещё не встреченных жителей (R4) и варианты текущей развилки
+        private readonly List<Enemy> monsters = new List<Enemy>();
+        public readonly List<Enemy> ForkOptions = new List<Enemy>();
+
         private readonly Queue<string> msgs = new Queue<string>();
         private Action onDone;
-
-        private static readonly string[] BuildingNames = { "Нижние облака", "Грозовая башня" };
 
         public string BuildingName
         {
@@ -64,7 +76,7 @@ namespace CloudTowers
             get { return msgs.Count > 0 ? msgs.Peek() : ""; }
         }
 
-        // Подсказка в рамке, когда игрок выбирает действие
+        // Подсказка в рамке, когда игрок выбирает действие в бою
         public string BattlePrompt
         {
             get
@@ -99,13 +111,21 @@ namespace CloudTowers
 
                 case Scene.Building:
                     if (key == 1) Go();
-                    else if (key == 2) { ShopInfo = "* Привет! Пирог стоит " + PiePrice + " золота."; Scene = Scene.Shop; }
-                    else if (key == 4) UsePie(false);
+                    else if (key == 2) OpenShop();
+                    else if (key == 4) UseItem(false, false);
+                    else if (key == 5) UseItem(false, true);
                     else if (key == 0) Scene = Scene.Menu;
                     break;
 
+                case Scene.Fork:
+                    if (key == 0) { ForkOptions.Clear(); ForkNote = ""; Scene = Scene.Building; }
+                    else if (key <= ForkOptions.Count) ChoosePath(key);
+                    else ForkNote = "* Нужно число от 1 до " + ForkOptions.Count + " (0 — назад).";
+                    break;
+
                 case Scene.Shop:
-                    if (key == 1) BuyPie();
+                    if (key == 1) BuyItem(false);
+                    else if (key == 2) BuyItem(true);
                     else if (key == 0) Scene = Scene.Building;
                     break;
 
@@ -114,7 +134,8 @@ namespace CloudTowers
                     if (key == 1) Attack();
                     else if (key == 2) Talk();
                     else if (key == 3) Spare();
-                    else if (key == 4) UsePie(true);
+                    else if (key == 4) UseItem(true, false);
+                    else if (key == 5) UseItem(true, true);
                     break;
             }
         }
@@ -154,6 +175,57 @@ namespace CloudTowers
             ShowRecords();
         }
 
+        // ---------- Списки (R4) ----------
+
+        // Заполняет список жителей стартовыми данными (5 штук, без босса)
+        private void FillList()
+        {
+            monsters.Clear();
+            for (int id = 0; id < Enemy.BossId; id++)
+                monsters.Add(Enemy.Create(id));
+        }
+
+        // Текст развилки: пронумерованный список путей с подсказками
+        public string ShowList()
+        {
+            string text = ForkNote != "" ? ForkNote : "* Куда пойти?";
+            for (int i = 0; i < ForkOptions.Count; i++)
+                text += "\n" + (i + 1) + ") " + PathNames[i] + ": " + ForkOptions[i].Hint + ".";
+            return text;
+        }
+
+        // Выбирает до трёх разных жителей из списка для развилки
+        private void OpenFork()
+        {
+            ForkOptions.Clear();
+            ForkNote = "";
+            if (monsters.Count == 0)
+            {
+                EnemyIndex++;
+                Info = "* Все жители уже встречены. Путь свободен.";
+                return;
+            }
+            var pool = new List<Enemy>(monsters);
+            int count = Math.Min(MaxPaths, pool.Count);
+            for (int i = 0; i < count; i++)
+            {
+                int k = Rnd.Next(pool.Count);
+                ForkOptions.Add(pool[k]);
+                pool.RemoveAt(k);
+            }
+            Scene = Scene.Fork;
+        }
+
+        // Игрок выбрал путь с номером number (1..ForkOptions.Count)
+        private void ChoosePath(int number)
+        {
+            Enemy chosen = ForkOptions[number - 1];
+            if (monsters.Contains(chosen)) monsters.Remove(chosen);
+            ForkOptions.Clear();
+            ForkNote = "";
+            StartBattle(chosen);
+        }
+
         // ---------- Игровой процесс ----------
 
         private void Say(Action done, params string[] lines)
@@ -180,8 +252,11 @@ namespace CloudTowers
             KilledAnyone = false;
             Won = false;
             GotPeaceBonus = false;
+            ForkOptions.Clear();
+            ForkNote = "";
             msgs.Clear();
             onDone = null;
+            FillList();
         }
 
         private void NewGame()
@@ -191,28 +266,34 @@ namespace CloudTowers
             Scene = Scene.Building;
         }
 
+        private void OpenShop()
+        {
+            ShopInfo = "* Пирог — " + PiePrice + " золота (+" + PieHeal + " HP). Торт со вкусом пельменей — "
+                       + CakePrice + " золота (+" + CakeHeal + " HP).";
+            Scene = Scene.Shop;
+        }
+
         private void Go()
         {
-            if (EnemyIndex < Enemy_Count())
-            {
-                StartBattle();
-            }
-            else
+            if (EnemyIndex >= EncountersPerBuilding)
             {
                 Building++;
                 EnemyIndex = 0;
                 Info = "* Ты поднялся в «Грозовую башню». Воздух гудит от молний.";
             }
+            else if (Building == 1 && EnemyIndex == EncountersPerBuilding - 1)
+            {
+                StartBattle(Enemy.Create(Enemy.BossId));
+            }
+            else
+            {
+                OpenFork();
+            }
         }
 
-        private int Enemy_Count()
+        private void StartBattle(Enemy opponent)
         {
-            return Enemy.CountInBuilding(Building);
-        }
-
-        private void StartBattle()
-        {
-            Enemy = Enemy.Create(Building, EnemyIndex);
+            Enemy = opponent;
             Scene = Scene.Battle;
             Say(null, Enemy.Intro);
         }
@@ -263,38 +344,46 @@ namespace CloudTowers
             }
         }
 
-        private void UsePie(bool inBattle)
+        // Показывает сообщение: в бою — как реплику (при endsTurn затем ходит враг), вне боя — в рамке здания
+        private void Notify(bool inBattle, string text, bool endsTurn)
         {
-            if (Hero.Pies <= 0)
+            if (inBattle) Say(endsTurn ? (Action)EnemyTurn : null, text);
+            else Info = text;
+        }
+
+        // Съедает пирог (cake == false) или торт (cake == true)
+        private void UseItem(bool inBattle, bool cake)
+        {
+            int have = cake ? Hero.Cakes : Hero.Pies;
+            if (have <= 0)
             {
-                if (inBattle) Say(null, "* У тебя нет пирогов.");
-                else Info = "* У тебя нет пирогов. Их можно купить в магазине.";
+                Notify(inBattle, "* У тебя нет " + (cake ? "тортов" : "пирогов") + ". Их можно купить в магазине.", false);
                 return;
             }
             if (Hero.Hp >= Hero.MaxHp)
             {
-                if (inBattle) Say(null, "* Здоровье и так полное.");
-                else Info = "* Здоровье и так полное.";
+                Notify(inBattle, "* Здоровье и так полное.", false);
                 return;
             }
-            Hero.Pies--;
             int before = Hero.Hp;
-            Hero.Hp = Math.Min(Hero.MaxHp, Hero.Hp + PieHeal);
-            string text = "* Ты съел пирог. +" + (Hero.Hp - before) + " HP.";
-            if (inBattle) Say(EnemyTurn, text);
-            else Info = text;
+            Hero.Hp = Math.Min(Hero.MaxHp, Hero.Hp + (cake ? CakeHeal : PieHeal));
+            if (cake) Hero.Cakes--; else Hero.Pies--;
+            string food = cake ? "торт со вкусом пельменей. Вкус странный, но сытный" : "пирог";
+            Notify(inBattle, "* Ты съел " + food + ". +" + (Hero.Hp - before) + " HP.", true);
         }
 
-        private void BuyPie()
+        // Покупает пирог (cake == false) или торт (cake == true)
+        private void BuyItem(bool cake)
         {
-            if (Hero.Gold < PiePrice)
+            int price = cake ? CakePrice : PiePrice;
+            if (Hero.Gold < price)
             {
                 ShopInfo = "* Не хватает золота.";
                 return;
             }
-            Hero.Gold -= PiePrice;
-            Hero.Pies++;
-            ShopInfo = "* Ты купил пирог. Спасибо!";
+            Hero.Gold -= price;
+            if (cake) Hero.Cakes++; else Hero.Pies++;
+            ShopInfo = "* Ты купил " + (cake ? "торт со вкусом пельменей" : "пирог") + ". Спасибо!";
         }
 
         private void EnemyTurn()
@@ -318,21 +407,14 @@ namespace CloudTowers
 
         private void EndBattle()
         {
+            bool wasBoss = Enemy.IsBoss;
             Enemy = null;
             EnemyIndex++;
             Scene = Scene.Building;
-            if (Building == 1)
-            {
-                Finish(true);
-            }
-            else if (EnemyIndex < Enemy_Count())
-            {
-                Info = "* Ты идёшь дальше по облачным коридорам.";
-            }
-            else
-            {
-                Info = "* В этом здании больше никого. Лестница ведёт выше.";
-            }
+            if (wasBoss) Finish(true);
+            else if (Building == 1) Info = "* Впереди дверь в тронный зал. Слышен гром.";
+            else if (EnemyIndex < EncountersPerBuilding) Info = "* Ты идёшь дальше по облачным коридорам.";
+            else Info = "* В этом здании больше никого. Лестница ведёт выше.";
         }
 
         private void Finish(bool won)

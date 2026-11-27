@@ -153,7 +153,7 @@ namespace CloudTowers
             }
             else
             {
-                int n = ReadDigit(code, 0, 4);
+                int n = ReadDigit(code, 0, 5);
                 if (n >= 0 && !game.HasMessage) game.Command(n);
             }
         }
@@ -225,6 +225,7 @@ namespace CloudTowers
                     list.Add(new Btn { Label = "1 Дальше", Key = 1 });
                     list.Add(new Btn { Label = "2 Магазин", Key = 2 });
                     list.Add(new Btn { Label = "4 Пирог", Key = 4 });
+                    list.Add(new Btn { Label = "5 Торт", Key = 5 });
                     list.Add(new Btn { Label = "0 В меню", Key = 0 });
                     LayoutRow(list);
                     break;
@@ -236,12 +237,21 @@ namespace CloudTowers
                         list.Add(new Btn { Label = "2 Говорить", Key = 2 });
                         list.Add(new Btn { Label = "3 Пощада", Key = 3 });
                         list.Add(new Btn { Label = "4 Пирог", Key = 4 });
+                        list.Add(new Btn { Label = "5 Торт", Key = 5 });
                         LayoutRow(list);
                     }
                     break;
 
                 case Scene.Shop:
-                    list.Add(new Btn { Label = "1 Купить пирог", Key = 1 });
+                    list.Add(new Btn { Label = "1 Пирог (" + Game.PiePrice + ")", Key = 1 });
+                    list.Add(new Btn { Label = "2 Торт (" + Game.CakePrice + ")", Key = 2 });
+                    list.Add(new Btn { Label = "0 Назад", Key = 0 });
+                    LayoutRow(list);
+                    break;
+
+                case Scene.Fork:
+                    for (int i = 0; i < game.ForkOptions.Count; i++)
+                        list.Add(new Btn { Label = (i + 1) + " " + Game.PathNames[i], Key = i + 1 });
                     list.Add(new Btn { Label = "0 Назад", Key = 0 });
                     LayoutRow(list);
                     break;
@@ -278,7 +288,7 @@ namespace CloudTowers
         {
             get
             {
-                return (game.Scene == Scene.Building || game.Scene == Scene.Battle || game.Scene == Scene.Shop)
+                return (game.Scene == Scene.Building || game.Scene == Scene.Fork || game.Scene == Scene.Battle || game.Scene == Scene.Shop)
                        && game.Building == 1;
             }
         }
@@ -365,7 +375,7 @@ namespace CloudTowers
                 using (var b = new SolidBrush(c))
                 {
                     var tr = new RectangleF(btns[i].Rect.X + (sel ? 14 : 0), btns[i].Rect.Y, btns[i].Rect.Width - (sel ? 14 : 0), btns[i].Rect.Height);
-                    g.DrawString(btns[i].Label, fMed, b, tr, center);
+                    g.DrawString(btns[i].Label, btns.Count > 4 ? fSmall : fMed, b, tr, center);
                 }
                 if (sel) DrawHeart(g, btns[i].Rect.X + 10, btns[i].Rect.Y + btns[i].Rect.Height / 2 - 8, 16, Color.Red);
             }
@@ -397,8 +407,9 @@ namespace CloudTowers
             g.FillRectangle(Brushes.Yellow, 155, 542, fill, 20);
             g.DrawString(h.Hp + "/" + h.MaxHp, fSmall, Brushes.White, 262, 542);
 
-            g.DrawString("Золото: " + h.Gold + "  Очки: " + h.Score + "  Пироги: " + h.Pies + "  Раунд: " + game.Round,
-                fSmall, Brushes.White, 345, 542);
+            g.DrawString("Раунд: " + game.Round, fSmall, Brushes.White, 345, 542);
+            g.DrawString("Золото: " + h.Gold + "  Очки: " + h.Score + "  Пироги: " + h.Pies + "  Торты: " + h.Cakes,
+                fSmall, Brushes.White, 50, 568);
         }
 
         private void DrawPlay(Graphics g)
@@ -422,6 +433,8 @@ namespace CloudTowers
                 DrawHero(g, 220, 305, 1.6f);
             }
 
+            if (game.Scene == Scene.Fork) DrawDoors(g, game.ForkOptions.Count);
+
             if (game.Scene == Scene.Battle && game.Enemy != null)
             {
                 DrawEnemy(g, game.Enemy, 400, 305);
@@ -431,6 +444,7 @@ namespace CloudTowers
             string text;
             if (game.Scene == Scene.Shop) text = game.ShopInfo;
             else if (game.Scene == Scene.Building) text = game.Info;
+            else if (game.Scene == Scene.Fork) text = game.ShowList();
             else if (game.HasMessage) text = game.CurrentMessage.Substring(0, Math.Min(shown, game.CurrentMessage.Length));
             else text = game.BattlePrompt;
             g.DrawString(text, fMed, Brushes.White, textRect);
@@ -544,14 +558,17 @@ namespace CloudTowers
             float bob = (float)Math.Sin(frame * 0.12) * 4f;
             by += bob;
 
-            if (en.Kind == 0) DrawCat(g, cx, by);
-            else if (en.Kind == 1) DrawPigeon(g, cx, by);
+            if (en.Kind == 0) DrawCat(g, cx, by, Color.FromArgb(250, 250, 255));
+            else if (en.Kind == 1) DrawPigeon(g, cx, by, Color.FromArgb(150, 155, 175), Color.FromArgb(95, 100, 125), true);
+            else if (en.Kind == 3) DrawCat(g, cx, by, Color.FromArgb(240, 150, 70));
+            else if (en.Kind == 4) DrawPigeon(g, cx, by, Color.FromArgb(150, 110, 70), Color.FromArgb(100, 70, 45), false);
+            else if (en.Kind == 5) DrawSlime(g, cx, by);
             else DrawKing(g, cx, by);
         }
 
-        private static void DrawCat(Graphics g, float cx, float by)
+        private static void DrawCat(Graphics g, float cx, float by, Color fur)
         {
-            using (var white = new SolidBrush(Color.FromArgb(250, 250, 255)))
+            using (var white = new SolidBrush(fur))
             using (var edge = new Pen(Color.FromArgb(150, 170, 200), 3))
             using (var pink = new SolidBrush(Color.FromArgb(255, 150, 170)))
             {
@@ -572,10 +589,10 @@ namespace CloudTowers
             }
         }
 
-        private static void DrawPigeon(Graphics g, float cx, float by)
+        private static void DrawPigeon(Graphics g, float cx, float by, Color bodyColor, Color wingColor, bool bolt)
         {
-            using (var gray = new SolidBrush(Color.FromArgb(150, 155, 175)))
-            using (var dark = new SolidBrush(Color.FromArgb(95, 100, 125)))
+            using (var gray = new SolidBrush(bodyColor))
+            using (var dark = new SolidBrush(wingColor))
             using (var orange = new SolidBrush(Color.FromArgb(255, 160, 40)))
             using (var yellow = new SolidBrush(Color.Gold))
             using (var leg = new Pen(Color.FromArgb(255, 160, 40), 4))
@@ -590,12 +607,46 @@ namespace CloudTowers
                     new PointF(cx + 78, by - 152), new PointF(cx + 105, by - 143), new PointF(cx + 78, by - 134)
                 });
                 g.FillEllipse(Brushes.Black, cx + 52, by - 160, 9, 11);
-                g.FillPolygon(yellow, new[]
+                if (bolt) g.FillPolygon(yellow, new[]
                 {
                     new PointF(cx + 22, by - 118), new PointF(cx + 40, by - 118), new PointF(cx + 30, by - 98),
                     new PointF(cx + 42, by - 98), new PointF(cx + 18, by - 66), new PointF(cx + 26, by - 96),
                     new PointF(cx + 14, by - 96)
                 });
+            }
+        }
+
+        private static void DrawSlime(Graphics g, float cx, float by)
+        {
+            using (var body = new SolidBrush(Color.FromArgb(120, 220, 170)))
+            using (var edge = new Pen(Color.FromArgb(40, 140, 100), 3))
+            {
+                g.FillEllipse(body, cx - 75, by - 95, 150, 95);
+                g.DrawEllipse(edge, cx - 75, by - 95, 150, 95);
+                g.FillEllipse(body, cx - 40, by - 130, 80, 60);
+                g.DrawEllipse(edge, cx - 40, by - 130, 80, 60);
+                g.FillEllipse(Brushes.White, cx - 30, by - 100, 24, 28);
+                g.FillEllipse(Brushes.White, cx + 6, by - 100, 24, 28);
+                g.FillEllipse(Brushes.Black, cx - 22, by - 90, 10, 12);
+                g.FillEllipse(Brushes.Black, cx + 14, by - 90, 10, 12);
+                g.DrawArc(edge, cx - 20, by - 70, 40, 24, 20, 140);
+            }
+        }
+
+        // Развилка: count дверей с номерами
+        private void DrawDoors(Graphics g, int count)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                float x = 400 + (i - (count - 1) / 2f) * 220;
+                using (var door = new SolidBrush(Color.FromArgb(120, 75, 45)))
+                using (var frame = new Pen(Color.FromArgb(60, 40, 25), 4))
+                {
+                    g.FillRectangle(door, x - 50, 130, 100, 170);
+                    g.DrawRectangle(frame, x - 50, 130, 100, 170);
+                }
+                g.FillEllipse(Brushes.Gold, x + 28, 215, 12, 12);
+                g.DrawString((i + 1).ToString(), fBig, Brushes.White, new RectangleF(x - 50, 85, 100, 40), center);
             }
         }
 
